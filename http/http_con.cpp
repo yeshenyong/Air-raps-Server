@@ -1,6 +1,14 @@
 #include "http_con.h"
 
 #include <mysql/mysql.h>
+#include <cryptopp/cryptlib.h>
+#define CRYPTOPP_ENABLE_NAMESPACE_WEAK 1
+#include <cryptopp/sha.h>
+#include <cryptopp/filters.h>
+#include <cryptopp/hex.h>
+#include <cryptopp/files.h>
+#include <cryptopp/channels.h>
+
 #include <fstream>
 
 /* 定义http响应的一些状态信息 */
@@ -26,6 +34,11 @@ const char *error_500_form = "There was an unusual problem serving the request f
 
 locker m_lock;
 map<string, string> users;
+
+string http_conn::getsha256(string msg)
+{
+    return objectS.tosha256(msg);
+}
 
 void http_conn::initmysql_result(connection_pool *connPool)
 {
@@ -503,7 +516,6 @@ http_conn::HTTP_CODE http_conn::do_respones()
             passwd[j] = m_string[i];
         }   
         passwd[j] = '\0';
-
         if ( *(p+1) == '3' ){
             /* 如果是注册，先检验数据中是否有重名的 */
             /* 没有重名的，进行增加数据 */
@@ -512,8 +524,10 @@ http_conn::HTTP_CODE http_conn::do_respones()
             strcat(sql_insert, "'");
             strcat(sql_insert, name);
             strcat(sql_insert, "', '");
-            strcat(sql_insert, passwd);
+            strcat(sql_insert, getsha256(passwd).c_str());
             strcat(sql_insert, "')");
+            LOG_INFO("%s && %s", name, passwd);
+            
             if ( users.find(name) == users.end() ){
                 m_lock.lock();
                 int res = mysql_query( mysql, sql_insert );
@@ -523,6 +537,9 @@ http_conn::HTTP_CODE http_conn::do_respones()
                     strcpy(m_url, "/log.html");
                 else
                     strcpy(m_url, "/registerError.html");
+                LOG_INFO("%s && %s", name, passwd);
+                LOG_INFO("%s", sql_insert);
+                LOG_INFO("%d", res);
             }
             else
                 strcpy(m_url, "/registerError.html");
